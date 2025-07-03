@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest an idea for the Com2Hard
+about: Suggest an idea for the Com4Sign
 title: ''
 labels: enhancement
 assignees: 'TheFelixLive'
