@@ -5,9 +5,9 @@ import { ActionFormData  } from "@minecraft/server-ui"
 const version_info = {
   name: "Command4Sign",
   version: "v.1.0.0",
-  build: "B000",
+  build: "B001",
   release_type: 2, // 0 = Development version (with debug); 1 = Beta version; 2 = Stable version
-  unix: 1751537559,
+  unix: 1751541394,
   update_message_period_unix: 15897600, // Normally 6 months = 15897600
   changelog: {
     // new_features
@@ -27,8 +27,8 @@ const version_info = {
 
 const links = [
   {name: "§l§5Github:§r", link: "github.com/TheFelixLive/Command4Sign"},
-  // {name: "§l§8Curseforge:§r", link: "curseforge.com/projects/1277546"},
-  // {name: "§l§aMcpedl:§r", link: "mcpedl.com/com4sign"}
+  {name: "§l§8Curseforge:§r", link: "curseforge.com/projects/1299249"},
+  {name: "§l§aMcpedl:§r", link: "mcpedl.com/com4sign"}
 ]
 
 console.log("Hello from " + version_info.name + " - "+version_info.version+" ("+version_info.build+") - Further debugging is "+ (version_info.release_type == 0? "enabled" : "disabled" ) + " by the version")
@@ -53,7 +53,7 @@ world.afterEvents.playerSpawn.subscribe((eventData) => {
       form.title("Update time!");
       form.body("Your current version (" + version_info.version + ") is older than 6 months.\nThere MIGHT be a newer version out. Feel free to update to enjoy the latest features!\n\nCheck out: §7"+links[0].link);
       form.button("Mute");
-  
+
       const showForm = async () => {
         form.show(player).then((response) => {
           if (response.canceled && response.cancelationReason === "UserBusy") {
@@ -89,7 +89,7 @@ system.beforeEvents.startup.subscribe((init) => {
             { type: CustomCommandParamType.String, name: "The text on the sign" }
         ],
     };
-    
+
     init.customCommandRegistry.registerCommand(com_about_sytak, com_about);
     init.customCommandRegistry.registerCommand(com_edit_sytak, com_edit);
 });
@@ -126,7 +126,7 @@ function com_edit(origin, location, text) {
       return undefined
     }
 
-    
+
     if (signComponent.getText() == text) {
       player.sendMessage("§cThe sign at "+Math.floor(location.x)+" "+ Math.floor(location.y) +" "+Math.floor(location.z)+" shows already: " + text)
       return undefined
@@ -145,7 +145,7 @@ function com_edit(origin, location, text) {
         }
       });
     }
-  
+
     return {
         status: CustomCommandStatus.Success,
     };
