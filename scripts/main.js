@@ -5,9 +5,9 @@ import { ActionFormData  } from "@minecraft/server-ui"
 const version_info = {
   name: "Command4Sign",
   version: "v.1.0.0",
-  build: "B001",
+  build: "B002",
   release_type: 2, // 0 = Development version (with debug); 1 = Beta version; 2 = Stable version
-  unix: 1751541394,
+  unix: 1751634911,
   update_message_period_unix: 15897600, // Normally 6 months = 15897600
   changelog: {
     // new_features
