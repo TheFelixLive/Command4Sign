@@ -4,11 +4,12 @@ import { ActionFormData  } from "@minecraft/server-ui"
 
 const version_info = {
   name: "Command4Sign",
-  version: "v.1.0.0",
-  build: "B002",
+  version: "v.1.1.0",
+  build: "B003",
   release_type: 2, // 0 = Development version (with debug); 1 = Beta version; 2 = Stable version
-  unix: 1751634911,
+  unix: 1751733334,
   update_message_period_unix: 15897600, // Normally 6 months = 15897600
+  uuid: "26f68120-d99b-4182-a1d1-105d6419cb05",
   changelog: {
     // new_features
     new_features: [
@@ -16,7 +17,7 @@ const version_info = {
     ],
     // general_changes
     general_changes: [
-
+      "Added Multiple Menu Support",
     ],
     // bug_fixes
     bug_fixes: [
@@ -33,6 +34,33 @@ const links = [
 
 console.log("Hello from " + version_info.name + " - "+version_info.version+" ("+version_info.build+") - Further debugging is "+ (version_info.release_type == 0? "enabled" : "disabled" ) + " by the version")
 
+/*------------------------
+ multiple_menu
+-------------------------*/
+
+
+// 2 = Standalone, 1 = Multiple Menu: Host, 0 = Multiple Menu: Client
+let system_privileges = 2
+
+system.afterEvents.scriptEventReceive.subscribe(event=> {
+  if (event.id === "multiple_menu:initialize") {
+    world.scoreboard.getObjective("multiple_menu_name").setScore(version_info.name, 1);
+    world.scoreboard.getObjective("multiple_menu_icon").setScore("textures/items/bamboo_hanging_sign", 1);
+    world.scoreboard.getObjective("multiple_menu_id").setScore(version_info.uuid, 1);
+    if (system_privileges == 2) system_privileges = 0;
+  }
+
+  if (event.id === "multiple_menu:open_"+version_info.uuid) {
+    dictionary_about_version(event.sourceEntity);
+  }
+})
+
+
+/*------------------------
+ Join messages
+-------------------------*/
+
+
 world.afterEvents.playerSpawn.subscribe((eventData) => {
     let { player } = eventData;
 
@@ -48,7 +76,7 @@ world.afterEvents.playerSpawn.subscribe((eventData) => {
 
     print(world.getDynamicProperty("com4sign:update_message_unix"))
 
-    if ((Math.floor(Date.now() / 1000)) > (JSON.parse(world.getDynamicProperty("com4sign:update_message_unix")).unix)) {
+    if ((Math.floor(Date.now() / 1000)) > (JSON.parse(world.getDynamicProperty("com4sign:update_message_unix")).unix) && system_privileges == 2) {
       let form = new ActionFormData();
       form.title("Update time!");
       form.body("Your current version (" + version_info.version + ") is older than 6 months.\nThere MIGHT be a newer version out. Feel free to update to enjoy the latest features!\n\nCheck out: §7"+links[0].link);
@@ -228,6 +256,7 @@ function dictionary_about_version(player) {
     "Name: " + version_info.name + "\n" +
     "Version: " + version_info.version + ((Math.floor(Date.now() / 1000)) > (version_info.update_message_period_unix + version_info.unix)? " §a(update time)§r" : " (" + version_info.build + ")") + "\n" +
     "Release type: " + ["dev", "preview", "stable"][version_info.release_type] + "\n" +
+    "UUID: "+version_info.uuid + "\n" +
     "Build date: " + getRelativeTime(Math.floor(Date.now() / 1000) - version_info.unix, player) +" ago"+
 
     "\n\n§7© "+ (build_date.year > 2025? "2025 - "+build_date.year : build_date.year )+" TheFelixLive. All rights reserved."
@@ -244,6 +273,16 @@ function dictionary_about_version(player) {
   actions.push(() => {
     dictionary_contact(player, build_date)
   });
+
+  if (system_privileges !== 2) {
+    form.divider()
+
+    // Back to main menu
+    form.button("");
+    actions.push(() => {
+      player.runCommand("scriptevent multiple_menu:open_main");
+    });
+  }
 
   form.show(player).then((response) => {
     if (response.selection == undefined ) {
