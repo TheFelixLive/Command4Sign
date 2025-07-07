@@ -5,9 +5,9 @@ import { ActionFormData  } from "@minecraft/server-ui"
 const version_info = {
   name: "Command4Sign",
   version: "v.1.1.0",
-  build: "B003",
+  build: "B004",
   release_type: 2, // 0 = Development version (with debug); 1 = Beta version; 2 = Stable version
-  unix: 1751733334,
+  unix: 1751897812,
   update_message_period_unix: 15897600, // Normally 6 months = 15897600
   uuid: "26f68120-d99b-4182-a1d1-105d6419cb05",
   changelog: {
@@ -21,7 +21,7 @@ const version_info = {
     ],
     // bug_fixes
     bug_fixes: [
-
+      "Fixed a bug that caused a gap to appear at the beginning of the changelog"
     ]
   }
 }
@@ -44,9 +44,9 @@ let system_privileges = 2
 
 system.afterEvents.scriptEventReceive.subscribe(event=> {
   if (event.id === "multiple_menu:initialize") {
-    world.scoreboard.getObjective("multiple_menu_name").setScore(version_info.name, 1);
-    world.scoreboard.getObjective("multiple_menu_icon").setScore("textures/items/bamboo_hanging_sign", 1);
-    world.scoreboard.getObjective("multiple_menu_id").setScore(version_info.uuid, 1);
+    world.scoreboard.getObjective("multiple_menu_name").setScore(version_info.uuid + "_" + version_info.name, 1);
+    world.scoreboard.getObjective("multiple_menu_icon").setScore(version_info.uuid + "_" + "textures/items/bamboo_hanging_sign", 1);
+
     if (system_privileges == 2) system_privileges = 0;
   }
 
@@ -259,7 +259,7 @@ function dictionary_about_version(player) {
     "UUID: "+version_info.uuid + "\n" +
     "Build date: " + getRelativeTime(Math.floor(Date.now() / 1000) - version_info.unix, player) +" ago"+
 
-    "\n\n§7© "+ (build_date.year > 2025? "2025 - "+build_date.year : build_date.year )+" TheFelixLive. All rights reserved."
+    "\n\n§7© "+ (build_date.year > 2025? "2025 - "+build_date.year : build_date.year )+" TheFelixLive. Licensed under the MIT License."
   )
 
   if (version_info.changelog.new_features.length > 0 || version_info.changelog.general_changes.length > 0 || version_info.changelog.bug_fixes.length > 0) {
@@ -322,47 +322,41 @@ function dictionary_contact(player, build_date) {
 }
 
 function dictionary_about_version_changelog(player, build_date) {
-  let form = new ActionFormData()
-  form.title("Changelog - "+version_info.version)
+  const { new_features, general_changes, bug_fixes, unix } = version_info.changelog;
+  const sections = [
+    { title: "§l§bNew Features§r", items: new_features },
+    { title: "§l§aGeneral Changes§r", items: general_changes },
+    { title: "§l§cBug Fixes§r", items: bug_fixes }
+  ];
 
-  const { new_features, general_changes, bug_fixes } = version_info.changelog;
-  const hasNew     = new_features.length > 0;
-  const hasGeneral = general_changes.length > 0;
-  const hasBug     = bug_fixes.length > 0;
+  const form = new ActionFormData().title("Changelog - " + version_info.version);
 
-  // New Features
-  if (hasNew) {
-    form.label("§l§bNew Features§r\n");
-    new_features.forEach(feature => form.label(`- ${feature}\n`));
-    // only draw divider if there's another section after
-    if (hasGeneral || hasBug) form.divider();
+  let bodySet = false;
+  for (let i = 0; i < sections.length; i++) {
+    const { title, items } = sections[i];
+    if (items.length === 0) continue;
+
+    const content = title + "\n\n" + items.map(i => `- ${i}`).join("\n\n");
+
+    if (!bodySet) {
+      form.body(content);
+      bodySet = true;
+    } else {
+      form.label(content);
+    }
+
+    // Add divider if there's at least one more section with items
+    if (sections.slice(i + 1).some(s => s.items.length > 0)) {
+      form.divider();
+    }
   }
 
-  // General Changes
-  if (hasGeneral) {
-    form.label("§l§aGeneral Changes§r\n");
-    general_changes.forEach(change => form.label(`- ${change}\n`));
-    // only draw divider if Bug Fixes follow
-    if (hasBug) form.divider();
-  }
-
-  // Bug Fixes
-  if (hasBug) {
-    form.label("§l§cBug Fixes§r\n");
-    bug_fixes.forEach(fix => form.label(`- ${fix}\n`));
-  }
-
-
-  form.label(`§7As of `+ getRelativeTime(Math.floor(Date.now() / 1000) - version_info.unix) + " ago");
-
+  const dateStr = `${build_date.day}.${build_date.month}.${build_date.year}`;
+  const relative = getRelativeTime(Math.floor(Date.now() / 1000) - unix);
+  form.label(`§7As of ${dateStr} (${relative} ago)`);
   form.button("");
 
-  form.show(player).then((response) => {
-    if (response.selection == undefined ) {
-      return -1
-    }
-    if (response.selection == 0) {
-      dictionary_about_version(player)
-    }
+  form.show(player).then(res => {
+    if (res.selection === 0) dictionary_about_version(player);
   });
 }
