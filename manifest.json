@@ -4,8 +4,8 @@
       "description": "If you are a bit in to command on both Java and Bedrock you probably know that Java allows players to modifier signs with commands but Bedrock players for some reason don't. This addon makes it possible!",
       "name": "Command4Sign",
       "uuid": "26f68120-d99b-4182-a1d1-105d6419cb05",
-      "version": [ 1, 1, 0],
-      "min_engine_version": [1, 21, 90]
+      "version": [ 1, 2, 0],
+      "min_engine_version": [1, 21, 100]
   },
   "modules": [
     {
@@ -25,7 +25,7 @@
   "dependencies": [
     {
       "module_name":"@minecraft/server",
-      "version":"2.1.0-beta"
+      "version":"2.1.0"
     },
     {
       "module_name": "@minecraft/server-ui",

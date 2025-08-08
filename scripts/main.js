@@ -4,10 +4,10 @@ import { ActionFormData  } from "@minecraft/server-ui"
 
 const version_info = {
   name: "Command4Sign",
-  version: "v.1.1.0",
-  build: "B004",
-  release_type: 2, // 0 = Development version (with debug); 1 = Beta version; 2 = Stable version
-  unix: 1751897812,
+  version: "v.1.2.0",
+  build: "B005",
+  release_type: 0, // 0 = Development version (with debug); 1 = Beta version; 2 = Stable version
+  unix: 1754661412,
   update_message_period_unix: 15897600, // Normally 6 months = 15897600
   uuid: "26f68120-d99b-4182-a1d1-105d6419cb05",
   changelog: {
@@ -17,11 +17,11 @@ const version_info = {
     ],
     // general_changes
     general_changes: [
-      "Added Multiple Menu Support",
+      "Added Support for v.1.21.100",
+      "Added multiple menu support for v.2.0"
     ],
     // bug_fixes
     bug_fixes: [
-      "Fixed a bug that caused a gap to appear at the beginning of the changelog"
     ]
   }
 }
@@ -39,22 +39,62 @@ console.log("Hello from " + version_info.name + " - "+version_info.version+" ("+
 -------------------------*/
 
 
-// 2 = Standalone, 1 = Multiple Menu: Host, 0 = Multiple Menu: Client
+// Status
 let system_privileges = 2
 
+/* This variable contains the status (or permissions) of your add-on:
+  2 means the system is not active (no other packs found);
+  1 means the system is acting as a host;
+  0 means the system is acting as a client;
+*/
+
+/*------------------------
+ Client (an addon only needs to have the client function to be recognizable)
+-------------------------*/
+
 system.afterEvents.scriptEventReceive.subscribe(event=> {
-  if (event.id === "multiple_menu:initialize") {
-    world.scoreboard.getObjective("multiple_menu_name").setScore(version_info.uuid + "_" + version_info.name, 1);
-    world.scoreboard.getObjective("multiple_menu_icon").setScore(version_info.uuid + "_" + "textures/items/bamboo_hanging_sign", 1);
+   if (event.id === "multiple_menu:data") {
+    let player = event.sourceEntity, data, scoreboard = world.scoreboard.getObjective("mm_data")
 
-    if (system_privileges == 2) system_privileges = 0;
-  }
+    // Reads data from the scoreboard
+    if (scoreboard) {
+      try {
+        data = JSON.parse(scoreboard.getParticipants()[0].displayName)
+      } catch (e) {
+        print("Wrong formated data: "+e) // Scoreboard IS available but contains garbisch
+        world.scoreboard.removeObjective("mm_data")
+        return -1
+      }
+    } else {
+      print("No Scoreboard!")
+      return -1 // Scoreboard is not available: happens when an addon has already processed the request e.g. "open main menu"
+    }
 
-  if (event.id === "multiple_menu:open_"+version_info.uuid) {
-    dictionary_about_version(event.sourceEntity);
-  }
+
+    // Initializing
+    if (data.event == "mm_initializing") {
+      scoreboard.removeParticipant(JSON.stringify(data))
+
+      data.data.push({
+        uuid: version_info.uuid,
+        name: version_info.name,
+        icon: "textures/items/bamboo_hanging_sign"
+      })
+
+      if (system_privileges == 2) system_privileges = 0;
+
+      // Saves data in to the scoreboard
+      scoreboard.setScore(JSON.stringify(data), 1)
+    }
+
+
+    // Will open the main menu of your addon
+    if (data.event == "mm_open" && data.data.target == version_info.uuid) {
+        dictionary_about(player);
+        world.scoreboard.removeObjective("mm_data")
+    }
+   }
 })
-
 
 /*------------------------
  Join messages
@@ -67,33 +107,6 @@ world.afterEvents.playerSpawn.subscribe((eventData) => {
     if (version_info.release_type !== 2) {
       player.sendMessage("§l§7[§fSystem§7]§r "+ player.name +" how is your experiences with "+ version_info.version +"? Does it meet your expectations? Would you like to change something and if so, what? Do you have a suggestion for a new feature? Share it at §l"+links[0].link)
       player.playSound("random.pop")
-    }
-
-    // Update popup
-    if (!world.getDynamicProperty("com4sign:update_message_unix" || JSON.parse(world.getDynamicProperty("com4sign:update_message_unix")).version !== version_info.version)) {
-      world.setDynamicProperty("com4sign:update_message_unix", JSON.stringify({unix: version_info.unix + version_info.update_message_period_unix, version: version_info.version}));
-    }
-
-    print(world.getDynamicProperty("com4sign:update_message_unix"))
-
-    if ((Math.floor(Date.now() / 1000)) > (JSON.parse(world.getDynamicProperty("com4sign:update_message_unix")).unix) && system_privileges == 2) {
-      let form = new ActionFormData();
-      form.title("Update time!");
-      form.body("Your current version (" + version_info.version + ") is older than 6 months.\nThere MIGHT be a newer version out. Feel free to update to enjoy the latest features!\n\nCheck out: §7"+links[0].link);
-      form.button("Mute");
-
-      const showForm = async () => {
-        form.show(player).then((response) => {
-          if (response.canceled && response.cancelationReason === "UserBusy") {
-            showForm()
-          } else {
-            if (response.selection === 0) {
-              world.setDynamicProperty("com4sign:update_message_unix", JSON.stringify({unix: (Math.floor(Date.now() / 1000)) + version_info.update_message_period_unix, version: version_info.version}));
-            }
-          }
-        });
-      };
-      showForm();
     }
 });
 
@@ -130,7 +143,7 @@ function com_about(origin) {
     const player = origin.sourceEntity;
 
     system.run(() => {
-      dictionary_about_version(player);
+      dictionary_about(player);
     });
 
     return {
@@ -185,7 +198,7 @@ function com_edit(origin, location, text) {
 
 function print(input) {
   if (version_info.release_type === 0) {
-    console.log(version_info.name + " - " + input)
+    console.log(version_info.name + " - " + JSON.stringify(input))
   }
 }
 
@@ -215,8 +228,6 @@ function getRelativeTime(diff) {
   return `a few seconds`;
 }
 
-
-
 function convertUnixToDate(unixSeconds, utcOffset) {
   const date = new Date(unixSeconds*1000);
   const localDate = new Date(date.getTime() + utcOffset * 60 * 60 * 1000);
@@ -240,38 +251,256 @@ function convertUnixToDate(unixSeconds, utcOffset) {
   };
 }
 
+/*------------------------
+ Internet API
+-------------------------*/
+
+function fetchViaInternetAPI(url, timeoutMs = 5000) {
+  return new Promise((resolve, reject) => {
+    try {
+      // Objective sicherstellen
+      let objective = world.scoreboard.getObjective("mm_data");
+      if (!objective) {
+        world.scoreboard.addObjective("mm_data");
+        objective = world.scoreboard.getObjective("mm_data");
+      }
+
+      // Payload bauen
+      const payload = {
+        event: "internet_api",
+        data: {
+          source: version_info.uuid,
+          url: url
+        }
+      };
+
+      // In Scoreboard schreiben und Event auslösen
+      objective.setScore(JSON.stringify(payload), 1);
+      world.getDimension("overworld").runCommand("scriptevent multiple_menu:data");
+
+      // State für Cleanup
+      let finished = false;
+      let timerHandle = null;
+
+      // Helper: safe cleanup (einmalig)
+      const cleanup = () => {
+        if (finished) return;
+        finished = true;
+        try { world.scoreboard.removeObjective("mm_data"); } catch (_) {}
+        try { system.afterEvents.scriptEventReceive.unsubscribe(subscription); } catch (_) {}
+        // Timer stoppen (versuche verschiedene API-Namen)
+        try {
+          if (timerHandle !== null) {
+            if (typeof system.clearRunTimeout === "function") system.clearRunTimeout(timerHandle);
+            else if (typeof system.clearRunInterval === "function") system.clearRunInterval(timerHandle);
+            else if (typeof clearTimeout === "function") clearTimeout(timerHandle);
+            else if (typeof clearInterval === "function") clearInterval(timerHandle);
+          }
+        } catch (_) {}
+      };
+
+      // Subscription für scriptevent
+      const subscription = system.afterEvents.scriptEventReceive.subscribe(event => {
+        if (event.id !== "multiple_menu:data") return;
+
+        try {
+          const board = world.scoreboard.getObjective("mm_data");
+          if (!board) {
+            // wurde möglicherweise bereits entfernt
+            cleanup();
+            return reject(new Error("Scoreboard mm_data nicht vorhanden nach Event."));
+          }
+
+          const participants = board.getParticipants();
+          if (!participants || participants.length === 0) {
+            // noch keine Daten — weiterwarten
+            return;
+          }
+
+          const raw = participants[0].displayName;
+          let data;
+          try {
+            data = JSON.parse(raw);
+          } catch (e) {
+            cleanup();
+            return reject(new Error("Falsches Format im Scoreboard: " + e));
+          }
+
+          if (data.event === "internet_api" && data.data && data.data.target === version_info.uuid) {
+            try {
+              const answer = JSON.parse(data.data.answer);
+              cleanup();
+              return resolve(answer);
+            } catch (e) {
+              cleanup();
+              return reject(new Error("Antwort konnte nicht als JSON geparst werden: " + e));
+            }
+          }
+          // sonst: nicht für uns bestimmt -> ignorieren
+        } catch (e) {
+          cleanup();
+          return reject(e);
+        }
+      });
+
+      // Timeout einrichten: system.runTimeout bevorzugen, sonst runInterval-Fallback
+      if (typeof system.runTimeout === "function") {
+        timerHandle = system.runTimeout(() => {
+          if (finished) return;
+          cleanup();
+          return reject(new Error("Timeout: keine Antwort von der Internet-API innerhalb " + timeoutMs + " ms"));
+        }, timeoutMs);
+      } else if (typeof system.runInterval === "function") {
+        const start = Date.now();
+        // poll alle 100ms auf Timeout
+        timerHandle = system.runInterval(() => {
+          if (finished) return;
+          if (Date.now() - start >= timeoutMs) {
+            cleanup();
+            return reject(new Error("Timeout: keine Antwort von der Internet-API innerhalb " + timeoutMs + " ms"));
+          }
+        }, 100);
+      } else {
+        // Kein Timer verfügbar -> sofort aufräumen & Fehler
+        cleanup();
+        return reject(new Error("Keine Timer-Funktionen verfügbar (kein runTimeout/runInterval)."));
+      }
+
+    } catch (err) {
+      try { world.scoreboard.removeObjective("mm_data"); } catch (_) {}
+      return reject(err);
+    }
+  });
+}
+
+/*------------------------
+ Update data (github)
+-------------------------*/
+
+let github_data
+
+system.run(() => {
+  update_github_data()
+});
+
+async function update_github_data() {
+  try {
+    await system.waitTicks(50)
+
+
+    fetchViaInternetAPI("https://api.github.com/repos/TheFelixLive/Com4Sign/releases", 8000)
+    .then(result => {
+      print("API-Antwort erhalten:");
+
+      print(result)
+      github_data = result.map(release => {
+        const totalDownloads = release.assets?.reduce((sum, asset) => sum + (asset.download_count || 0), 0) || 0;
+        return {
+          tag: release.tag_name,
+          name: release.name,
+          prerelease: release.prerelease,
+          published_at: release.published_at,
+          body: release.body,
+          download_count: totalDownloads
+        };
+      });
+
+    })
+    .catch(err => {
+      print("Fehler beim Abruf: " + err);
+    });
+
+  } catch (e) {
+  }
+}
+
+function compareVersions(version1, version2) {
+  if (!version1 || !version2) return 0;
+
+  // Entfernt 'v.' oder 'V.' am Anfang
+  version1 = version1.replace(/^v\./i, '').trim();
+  version2 = version2.replace(/^v\./i, '').trim();
+
+  // Extrahiere Beta-Nummer aus "_1" oder " Beta 1"
+  function extractBeta(version) {
+    const betaMatch = version.match(/^(.*?)\s*(?:_|\sBeta\s*)(\d+)$/i);
+    if (betaMatch) {
+      return {
+        base: betaMatch[1].trim(),
+        beta: parseInt(betaMatch[2], 10)
+      };
+    }
+    return {
+      base: version,
+      beta: null
+    };
+  }
+
+  const v1 = extractBeta(version1);
+  const v2 = extractBeta(version2);
+
+  const v1Parts = v1.base.split('.').map(Number);
+  const v2Parts = v2.base.split('.').map(Number);
+
+  // Vergleicht Major, Minor, Patch
+  for (let i = 0; i < Math.max(v1Parts.length, v2Parts.length); i++) {
+    const num1 = v1Parts[i] || 0;
+    const num2 = v2Parts[i] || 0;
+    if (num1 > num2) return 1;
+    if (num1 < num2) return -1;
+  }
+
+  // Wenn gleich, vergleiche Beta
+  if (v1.beta !== null && v2.beta === null) return -1; // Beta < Vollversion
+  if (v1.beta === null && v2.beta !== null) return 1;  // Vollversion > Beta
+
+  if (v1.beta !== null && v2.beta !== null) {
+    if (v1.beta > v2.beta) return 1;
+    if (v1.beta < v2.beta) return -1;
+  }
+
+  return 0;
+}
+
 
 
 /*------------------------
- Menus
+ Dictionary
 -------------------------*/
 
-
-function dictionary_about_version(player) {
+function dictionary_about(player) {
   let form = new ActionFormData()
   let actions = []
   let build_date = convertUnixToDate(version_info.unix, 0);
   form.title("About")
-  form.body(
-    "Name: " + version_info.name + "\n" +
-    "Version: " + version_info.version + ((Math.floor(Date.now() / 1000)) > (version_info.update_message_period_unix + version_info.unix)? " §a(update time)§r" : " (" + version_info.build + ")") + "\n" +
-    "Release type: " + ["dev", "preview", "stable"][version_info.release_type] + "\n" +
-    "UUID: "+version_info.uuid + "\n" +
-    "Build date: " + getRelativeTime(Math.floor(Date.now() / 1000) - version_info.unix, player) +" ago"+
 
-    "\n\n§7© "+ (build_date.year > 2025? "2025 - "+build_date.year : build_date.year )+" TheFelixLive. Licensed under the MIT License."
+  form.body("§lGeneral")
+  form.label(
+    "Name: " + version_info.name+ "\n"+
+    "UUID: "+ version_info.uuid
   )
 
+  form.label("§lVersion")
+  form.label(
+    "Version: " + version_info.version + "\n" +
+    "Build: " + version_info.build + "\n" +
+    "Release type: " + ["dev", "preview", "stable"][version_info.release_type] + "\n" +
+    "Build date: " + (getRelativeTime(Math.floor(Date.now() / 1000) - version_info.unix, player) + " ago") + "\n" +
+    "Status: " + (github_data? (compareVersions((version_info.release_type === 2 ? github_data.find(r => !r.prerelease)?.tag : github_data[0]?.tag), version_info.version) !== 1? "§aLatest version" : "§6Update available!"): "§cFailed to fetch!")
+  );
+
+  form.label("§7© "+ (build_date.year > 2025 ? "2025 - " + build_date.year : build_date.year ) + " TheFelixLive. Licensed under the MIT License.")
+
   if (version_info.changelog.new_features.length > 0 || version_info.changelog.general_changes.length > 0 || version_info.changelog.bug_fixes.length > 0) {
-    form.button("§9Changelog");
+    form.button("§9Changelog"+(github_data?"s":""));
     actions.push(() => {
-      dictionary_about_version_changelog(player, build_date)
+      github_data? dictionary_about_changelog(player) : dictionary_about_changelog_legacy(player, build_date)
     });
   }
 
   form.button("§3Contact");
   actions.push(() => {
-    dictionary_contact(player, build_date)
+    dictionary_contact(player)
   });
 
   if (system_privileges !== 2) {
@@ -280,7 +509,9 @@ function dictionary_about_version(player) {
     // Back to main menu
     form.button("");
     actions.push(() => {
-      player.runCommand("scriptevent multiple_menu:open_main");
+      world.scoreboard.addObjective("mm_data");
+      world.scoreboard.getObjective("mm_data").setScore(JSON.stringify({event: "mm_open", data:{target: "main"}}), 1);
+      player.runCommand("scriptevent multiple_menu:data");
     });
   }
 
@@ -294,35 +525,140 @@ function dictionary_about_version(player) {
   });
 }
 
-function dictionary_contact(player, build_date) {
-  let form = new ActionFormData()
-  let actions = []
-  form.title("Contact")
+function dictionary_about_changelog(player) {
+  const form = new ActionFormData();
+  const actions = [];
 
-  form.body("If you need want to report a bug, need help, or have suggestions to improvements to the project, you can reach me via these platforms:\n");
+  // ---- 1) Hilfsdaten ----------------------------------------------------
+  const installed   = version_info.version;        // z.B. "v1.5.0"
+  const buildName   = version_info.build;          // z.B. "B123"
+  const installDate = version_info.unix;           // z.B. "1700000000"
 
-  for (const entry of links) {
-    if (entry !== links[0]) form.divider()
-    form.label(`${entry.name}\n${entry.link}`);
+  // ---- 3) Neue Instanzen finden -----------------------------------------
+  const latest_stable = github_data.find(r => !r.prerelease);
+  let   latest_beta   = github_data.find(r => r.prerelease);
+
+  // ---- 4) Beta-Versions-Filter (nach release_type) --------------------
+  if (version_info.release_type === 2) { // „nur Beta zulassen“
+    if (latest_beta && latest_stable) {
+      const isBetaNewer = compareVersions(latest_beta.name, latest_stable.name) > 0;
+      if (isBetaNewer) {
+        // Nur die neueste Beta behalten
+        github_data = github_data.filter(r => r === latest_beta || !r.prerelease);
+      } else {
+        // Stable neuer oder gleich → Betas entfernen
+        github_data = github_data.filter(r => !r.prerelease);
+        latest_beta = undefined;
+      }
+    } else {
+      // Sicherheit: Alle Betas entfernen
+      github_data = github_data.filter(r => !r.prerelease);
+      latest_beta = undefined;
+    }
+  } else {
+    // Wenn Stable neuer als Beta ist → Beta Label unterdrücken
+    if (latest_beta && latest_stable) {
+      const isStableNewer = compareVersions(latest_stable.name, latest_beta.name) > 0;
+      if (isStableNewer) {
+        latest_beta = undefined; // Kein Beta-Label später anzeigen
+      }
+    }
   }
 
-  form.button("");
-  actions.push(() => {
-    dictionary_about_version(player, build_date)
+
+  // ---- 5) Alle Einträge, inkl. eventuell fehlenden Installations‑Eintrag --
+  const allData = [...github_data];
+
+  // Prüfen, ob die installierte Version überhaupt in der Liste vorkommt
+  const isInstalledListed = github_data.some(r => r.name === installed);
+  if (!isInstalledListed) {
+    // Dummy‑Objekt – so sieht es aus wie ein reguläres GitHub‑Release
+    allData.push({
+      name:        installed,
+      published_at: installDate,
+      prerelease:  false,          // wichtig, damit das Label nicht „(latest beta)“ bekommt
+    });
+  }
+
+  // Sortieren (nach Version)
+  allData.sort((a, b) => compareVersions(b.name, a.name));
+
+  // ---- 6) UI bauen ----------------------------------------------------
+  form.title("About");
+  form.body("Select a version");
+
+  allData.forEach(r => {
+    // Prüfen, ob r.published_at schon Unix-Sekunden ist
+    const publishedUnix = (typeof r.published_at === 'number' && r.published_at < 1e12)
+      ? r.published_at // schon in Sekunden
+      : Math.floor(new Date(r.published_at).getTime() / 1000); // in Sekunden umrechnen
+
+    let label;
+    let build_text = (getRelativeTime(Math.floor(Date.now() / 1000) - publishedUnix, player) + " ago");
+
+    if (r === latest_beta && r.name === installed) {
+      label = `${r.name} (${buildName})\n${build_text} §9(latest beta)`;
+    } else {
+      label = `${r.name}\n${build_text}`;
+
+      if (r === latest_stable) {
+        label += ' §a(latest version)';
+      } else if (r === latest_beta) {
+        label += ' §9(latest beta)';
+      } else if (r.name === installed) {
+        label += ' §6(installed version)';
+      }
+    }
+
+    form.button(label);
+
+    actions.push(() => {
+      dictionary_about_changelog_view(player, r);
+    });
   });
 
-  form.show(player).then((response) => {
-    if (response.selection == undefined ) {
-      return -1
-    }
-    if (response.selection !== undefined && actions[response.selection]) {
-      actions[response.selection]();
-    }
+
+  // ---- 7) Footer‑Button -------------------------------------------------
+  form.divider();
+  form.button("");
+  actions.push(() => {
+    dictionary_about(player);
+  });
+
+  // ---- 8) Anzeigen -----------------------------------------------------
+  form.show(player).then(response => {
+    if (response.selection === undefined) return;
+    if (actions[response.selection]) actions[response.selection]();
   });
 }
 
-function dictionary_about_version_changelog(player, build_date) {
-  const { new_features, general_changes, bug_fixes, unix } = version_info.changelog;
+function dictionary_about_changelog_view(player, version) {
+  const publishedUnix = (typeof version.published_at === 'number' && version.published_at < 1e12)
+  ? version.published_at // schon in Sekunden
+  : Math.floor(new Date(version.published_at).getTime() / 1000);
+
+  let build_date = convertUnixToDate(publishedUnix, 0);
+
+  if (version.name == version_info.version) return dictionary_about_changelog_legacy(player, build_date)
+  const form = new ActionFormData().title("Changelog - " + version.name);
+
+  // TODO: Markdown support
+  form.body(version.body)
+
+
+  const dateStr = `${build_date.day}.${build_date.month}.${build_date.year}`;
+  const relative = getRelativeTime(Math.floor(Date.now() / 1000) - publishedUnix);
+  form.label(`§7As of ${dateStr} (${relative} ago)`);
+  form.button("");
+
+  form.show(player).then(res => {
+    if (res.selection === 0) dictionary_about_changelog(player);
+  });
+}
+
+function dictionary_about_changelog_legacy(player, build_date) {
+  const { new_features, general_changes, bug_fixes } = version_info.changelog;
+  const { unix } = version_info
   const sections = [
     { title: "§l§bNew Features§r", items: new_features },
     { title: "§l§aGeneral Changes§r", items: general_changes },
@@ -357,6 +693,33 @@ function dictionary_about_version_changelog(player, build_date) {
   form.button("");
 
   form.show(player).then(res => {
-    if (res.selection === 0) dictionary_about_version(player);
+    if (res.selection === 0) github_data? dictionary_about_changelog(player) : dictionary_about(player);
+  });
+}
+
+function dictionary_contact(player) {
+  let form = new ActionFormData()
+  let actions = []
+  form.title("Contact")
+
+  form.body("If you need want to report a bug, need help, or have suggestions to improvements to the project, you can reach me via these platforms:\n");
+
+  for (const entry of links) {
+    if (entry !== links[0]) form.divider()
+    form.label(`${entry.name}\n${entry.link}`);
+  }
+
+  form.button("");
+  actions.push(() => {
+    dictionary_about(player)
+  });
+
+  form.show(player).then((response) => {
+    if (response.selection == undefined ) {
+      return -1
+    }
+    if (response.selection !== undefined && actions[response.selection]) {
+      actions[response.selection]();
+    }
   });
 }
