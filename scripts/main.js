@@ -5,15 +5,15 @@ import { ActionFormData  } from "@minecraft/server-ui"
 const version_info = {
   name: "Command4Sign",
   version: "v.1.2.0",
-  build: "B005",
+  build: "B006",
   release_type: 0, // 0 = Development version (with debug); 1 = Beta version; 2 = Stable version
-  unix: 1754661412,
+  unix: 1754738330,
   update_message_period_unix: 15897600, // Normally 6 months = 15897600
   uuid: "26f68120-d99b-4182-a1d1-105d6419cb05",
   changelog: {
     // new_features
     new_features: [
-
+      "The About page got a redesigned"
     ],
     // general_changes
     general_changes: [
@@ -66,7 +66,7 @@ system.afterEvents.scriptEventReceive.subscribe(event=> {
         return -1
       }
     } else {
-      print("No Scoreboard!")
+      // print("No Scoreboard!")
       return -1 // Scoreboard is not available: happens when an addon has already processed the request e.g. "open main menu"
     }
 
@@ -255,16 +255,21 @@ function convertUnixToDate(unixSeconds, utcOffset) {
  Internet API
 -------------------------*/
 
-function fetchViaInternetAPI(url, timeoutMs = 5000) {
+
+
+async function fetchViaInternetAPI(url, timeoutMs = 5000) {
+  // Wait until the line (the scoreboard) is free
+  let objective = world.scoreboard.getObjective("mm_data");
+
+  if (objective) {
+    await waitForNoObjective("mm_data");
+
+    world.scoreboard.addObjective("mm_data");
+    objective = world.scoreboard.getObjective("mm_data");
+  }
+
   return new Promise((resolve, reject) => {
     try {
-      // Objective sicherstellen
-      let objective = world.scoreboard.getObjective("mm_data");
-      if (!objective) {
-        world.scoreboard.addObjective("mm_data");
-        objective = world.scoreboard.getObjective("mm_data");
-      }
-
       // Payload bauen
       const payload = {
         event: "internet_api",
@@ -291,8 +296,8 @@ function fetchViaInternetAPI(url, timeoutMs = 5000) {
         // Timer stoppen (versuche verschiedene API-Namen)
         try {
           if (timerHandle !== null) {
-            if (typeof system.clearRunTimeout === "function") system.clearRunTimeout(timerHandle);
-            else if (typeof system.clearRunInterval === "function") system.clearRunInterval(timerHandle);
+            if (typeof system.runTimeout === "function") system.runTimeout(timerHandle);
+            else if (typeof system.runInterval === "function") system.runInterval(timerHandle);
             else if (typeof clearTimeout === "function") clearTimeout(timerHandle);
             else if (typeof clearInterval === "function") clearInterval(timerHandle);
           }
@@ -373,6 +378,15 @@ function fetchViaInternetAPI(url, timeoutMs = 5000) {
   });
 }
 
+async function waitForNoObjective(name) {
+  let obj = world.scoreboard.getObjective(name);
+  while (obj) {
+    // kleine Pause (z. B. 100ms), um den Server nicht zu blockieren
+    await new Promise(resolve => system.runTimeout(resolve, 5)); // 5 Ticks warten
+    obj = world.scoreboard.getObjective(name);
+  }
+}
+
 /*------------------------
  Update data (github)
 -------------------------*/
@@ -385,10 +399,7 @@ system.run(() => {
 
 async function update_github_data() {
   try {
-    await system.waitTicks(50)
-
-
-    fetchViaInternetAPI("https://api.github.com/repos/TheFelixLive/Com4Sign/releases", 8000)
+    fetchViaInternetAPI("https://api.github.com/repos/TheFelixLive/Com4Sign/releases")
     .then(result => {
       print("API-Antwort erhalten:");
 

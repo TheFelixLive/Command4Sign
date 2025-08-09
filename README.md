@@ -13,13 +13,6 @@ So it's pretty straight forward just type:
 > Just make sure to replace "x y z" with the actual coordinates and "text" well with your text
 
 # Installation
-> [!CAUTION]
-> Only use this Addon with the following Minecraft versions:
-> - v.1.21.90
-> - v.1.21.91
-> - v.1.21.92
-> - v.1.21.93
-
 1. **Download** the latest release for your Minecraft version from [here](https://github.com/TheFelixLive/Command4Sign/releases/latest).
 2. **Open** the `.mcpack` or `.mcaddon` file with Minecraft.
 3. **Create** a new world OR **edit** an existing world
@@ -28,10 +21,7 @@ So it's pretty straight forward just type:
 5. **Click on** "Available"
 6. **Activate** the Addon
 ---
-7. **Navigate to**: **Experiments**.
-8. **Activate** `Beta APIs`
----
-9. `Play` or `Create` your World
+7. `Play` or `Create` your World
 
 # Multiple Menu
 This add-on supports multiple menus. But what does that actually mean?
