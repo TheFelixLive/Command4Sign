@@ -5,9 +5,9 @@ import { ActionFormData  } from "@minecraft/server-ui"
 const version_info = {
   name: "Command4Sign",
   version: "v.1.2.0",
-  build: "B006",
+  build: "B007",
   release_type: 0, // 0 = Development version (with debug); 1 = Beta version; 2 = Stable version
-  unix: 1754738330,
+  unix: 1754829998,
   update_message_period_unix: 15897600, // Normally 6 months = 15897600
   uuid: "26f68120-d99b-4182-a1d1-105d6419cb05",
   changelog: {
@@ -22,6 +22,7 @@ const version_info = {
     ],
     // bug_fixes
     bug_fixes: [
+      "Fixed a bug that caused the changelog to always display \"a few seconds ago\""
     ]
   }
 }
@@ -251,22 +252,167 @@ function convertUnixToDate(unixSeconds, utcOffset) {
   };
 }
 
+function markdownToMinecraft(md) {
+  if (typeof md !== 'string') return '';
+
+  // normalize newlines
+  md = md.replace(/\r\n?/g, '\n');
+
+  const UNSUPPORTED_MSG = '§o§7Tabelles are not supported! Visit GitHub for this.';
+
+  // helper: map admonition type -> minecraft color code (choose sensible defaults)
+  function admonColor(type) {
+    const t = (type || '').toLowerCase();
+    if (['caution', 'warning', 'danger', 'important'].includes(t)) return '§c'; // red
+    if (['note', 'info', 'tip', 'hint'].includes(t)) return '§b'; // aqua
+    return '§e'; // fallback: yellow
+  }
+
+  // inline processor (handles code spans first, then bold/italic/strike, links/images, etc.)
+  function processInline(text) {
+    if (!text) return '';
+
+    // tokenise code spans to avoid further processing inside them
+    const tokens = [];
+    text = text.replace(/(`+)([\s\S]*?)\1/g, (m, ticks, code) => {
+      const safe = code.replace(/\n+/g, ' '); // inline code -> single line
+      const repl = '§7' + safe + '§r';
+      tokens.push(repl);
+      return `__MD_TOKEN_${tokens.length - 1}__`;
+    });
+
+    // images -> unsupported (replace whole image with message)
+    text = text.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, () => UNSUPPORTED_MSG);
+
+    // links -> keep link text only (no URL)
+    text = text.replace(/\[([^\]]+)\]\((?:[^)]+)\)/g, '$1');
+
+    // bold: **text** or __text__ -> §ltext§r
+    text = text.replace(/(\*\*|__)(?=\S)([\s\S]*?\S)\1/g, '§l$2§r');
+
+    // italic: *text* or _text_ -> §otext§r
+    // (do after bold so that **...** won't be partially matched)
+    text = text.replace(/(\*|_)(?=\S)([\s\S]*?\S)\1/g, '§o$2§r');
+
+    // strikethrough: ~~text~~ -> use italic+gray as fallback (no §m)
+    text = text.replace(/~~([\s\S]*?)~~/g, '§o§7$1§r');
+
+    // simple HTML tags or raw tags -> treat as unsupported (avoid exposing markup)
+    if (/<\/?[a-z][\s\S]*?>/i.test(text)) return UNSUPPORTED_MSG;
+
+    // restore code tokens
+    text = text.replace(/__MD_TOKEN_(\d+)__/g, (m, idx) => tokens[Number(idx)] || '');
+
+    return text;
+  }
+
+  // 1) Replace fenced code blocks (```...```) with unsupported message
+  md = md.replace(/```[\s\S]*?```/g, () => UNSUPPORTED_MSG);
+
+  // 2) Replace GitHub-style admonition blocks: ::: type\n...\n:::
+  md = md.replace(/::: *([A-Za-z0-9_-]+)\s*\n([\s\S]*?)\n:::/gmi, (m, type, content) => {
+    // flatten content lines, then process inline inside
+    const inner = processInline(content.replace(/\n+/g, ' ').trim());
+    const cap = type.charAt(0).toUpperCase() + type.slice(1);
+    return `§l${admonColor(type)}${cap}: ${inner}§r`;
+  });
+
+  // now process line-by-line for tables / headings / lists / blockquotes / admonitions-as-blockquotes
+  const lines = md.split('\n');
+  const out = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+
+    // trim trailing CR/ spaces
+    const raw = line;
+
+    //  ---- detect table: a row with '|' and a following separator row like "| --- | --- |" or "---|---"
+    const nextLine = lines[i + 1] || '';
+    const isTableRow = /\|/.test(line);
+    const nextIsSeparator = /^\s*\|?[:\-\s|]+$/.test(nextLine);
+    if (isTableRow && nextIsSeparator) {
+      // consume all contiguous table rows
+      out.push(UNSUPPORTED_MSG);
+      i++; // skip the separator
+      while (i + 1 < lines.length && /\|/.test(lines[i + 1])) i++;
+      continue;
+    }
+
+    //  ---- headings (#, ##, ###) -> §l + content + §r + \n
+    const hMatch = line.match(/^(#{1,3})\s*(.*)$/);
+    if (hMatch) {
+      const content = hMatch[2].trim();
+      out.push('§l' + processInline(content) + '§r\n');
+      continue;
+    }
+
+    //  ---- GitHub-style single-line admonition in > or plain "Caution: ..." at line start
+    const admonLineMatch = raw.match(/^\s*(?:>\s*)?(?:\*\*)?(Caution|Warning|Note|Tip|Important|Danger|Info)(?:\*\*)?:\s*(.+)$/i);
+    if (admonLineMatch) {
+      const type = admonLineMatch[1];
+      const content = admonLineMatch[2].trim();
+      out.push(`§l${admonColor(type)}${type}: ${processInline(content)}§r`);
+      continue;
+    }
+
+    //  ---- blockquote lines starting with '>'
+    if (/^\s*>/.test(line)) {
+      const content = line.replace(/^\s*>+\s?/, '');
+      out.push('§o' + processInline(content) + '§r');
+      continue;
+    }
+
+    //  ---- images or html inline -> unsupported
+    if (/^!\[.*\]\(.*\)/.test(line) || /<[^>]+>/.test(line)) {
+      out.push(UNSUPPORTED_MSG);
+      continue;
+    }
+
+    //  ---- unordered list (-, *, +) -> bullet + inline
+    if (/^\s*[-*+]\s+/.test(line)) {
+      const item = line.replace(/^\s*[-*+]\s+/, '');
+      out.push('• ' + processInline(item));
+      continue;
+    }
+
+    //  ---- ordered list (1. 2. ...) -> bullet as well
+    if (/^\s*\d+\.\s+/.test(line)) {
+      const item = line.replace(/^\s*\d+\.\s+/, '');
+      out.push('• ' + processInline(item));
+      continue;
+    }
+
+    //  ---- default: process inline formatting
+    // empty line -> keep empty
+    if (line.trim() === '') {
+      out.push('');
+      continue;
+    }
+
+    out.push(processInline(line));
+  }
+
+  // join with newline and return
+  return out.join('\n');
+}
+
 /*------------------------
  Internet API
 -------------------------*/
 
+async function fetchViaInternetAPI(url, timeoutMs = 20) {
+  await system.waitTicks(1); // If mm_host gets initialisiert later
 
-
-async function fetchViaInternetAPI(url, timeoutMs = 5000) {
   // Wait until the line (the scoreboard) is free
   let objective = world.scoreboard.getObjective("mm_data");
 
-  if (objective) {
+  if (objective !== undefined) {
     await waitForNoObjective("mm_data");
-
-    world.scoreboard.addObjective("mm_data");
-    objective = world.scoreboard.getObjective("mm_data");
   }
+
+  world.scoreboard.addObjective("mm_data");
+  objective = world.scoreboard.getObjective("mm_data");
 
   return new Promise((resolve, reject) => {
     try {
@@ -401,9 +547,8 @@ async function update_github_data() {
   try {
     fetchViaInternetAPI("https://api.github.com/repos/TheFelixLive/Com4Sign/releases")
     .then(result => {
-      print("API-Antwort erhalten:");
+      print("API-Antwort erhalten");
 
-      print(result)
       github_data = result.map(release => {
         const totalDownloads = release.assets?.reduce((sum, asset) => sum + (asset.download_count || 0), 0) || 0;
         return {
@@ -654,7 +799,7 @@ function dictionary_about_changelog_view(player, version) {
   const form = new ActionFormData().title("Changelog - " + version.name);
 
   // TODO: Markdown support
-  form.body(version.body)
+  form.body(markdownToMinecraft(version.body))
 
 
   const dateStr = `${build_date.day}.${build_date.month}.${build_date.year}`;
